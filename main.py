@@ -1,26 +1,27 @@
 import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('AppIndicator3', '0.1')
+
 from gi.repository import Gtk as gtk
 from gi.repository import Gdk as gdk
 from gi.repository import AppIndicator3 as appindicator
 from gi.repository import GObject as gobject
+
 import signal
 import os, subprocess, time
 from datetime import datetime
-import controls
+import sqlite3
 
 APPINDICATOR_ID = 'Pomodoro'
-WORK_TIME = 0.5
-SHORT_BREAK = 0.2
-LONG_BREAK = 0.3
-STREAK_LENGTH = 2
+WORK_TIME = 25
+SHORT_BREAK = 5
+LONG_BREAK = 15
+STREAK_LENGTH = 4
 
 class UbuntuIndicator(object):
-    streak = 0
-    yesterday_streak = 0
-    startdate = datetime.now().day
-    timer = 0
+    conn = sqlite3.connect('data/' + 'pomodoro.db')
+    cur = conn.cursor()
+
     PD = 'pomodoro'
     LB = 'long_break'
     SB = 'short_break'
@@ -70,13 +71,14 @@ class UbuntuIndicator(object):
 
     def quit(self, source):
         gtk.main_quit()
+        self.conn.close()
 
     def start(self, source):
         self.item_start.hide()
         self.item_pause.show()
         self.item_stop.show()
-        if datetime.now().day - self.startdate >= 1:
-            self.reset()
+        if (datetime.now() - self.reset_time).seconds >= 24*3600:
+            self.reset_day()
         self.work_time()
 
     def get_icon(self, name=None, iconName=None):
@@ -123,8 +125,10 @@ class UbuntuIndicator(object):
         self.timer += 1
         self.indicator.set_icon(self.get_icon())
 
-        if self.timer > WORK_TIME*60:
+        if self.timer == WORK_TIME*60:
             self.streak += 1
+            self.cur.execute("UPDATE userdata SET streak=? WHERE streak=?", (self.streak, self.streak - 1))
+            self.conn.commit()
             self.item_streak.set_label('Day Streak: %s' % (self.streak, ))
             if self.streak % STREAK_LENGTH == 0:
                 self.break_time(LONG_BREAK)
@@ -136,8 +140,9 @@ class UbuntuIndicator(object):
         self.timer += 1
         self.indicator.set_icon(self.get_icon())
         cur_pos = gdk.get_default_root_window().get_pointer()
-        if self.timer > breakTime*60:
+        if self.timer == breakTime*60:
             while cur_pos == gdk.get_default_root_window().get_pointer():
+                self.indicator.set_icon(self.get_icon(iconName='pomodoro-paused-000.svg'))
                 time.sleep(0.5)
             self.work_time()
         return True
@@ -156,12 +161,22 @@ class UbuntuIndicator(object):
         self.item_resume.show()
 
     def stop(self, source):
+        self.stop_pomodoro()
+
+    def stop_pomodoro(self):
         self.item_pause.hide()
         self.item_resume.hide()
         self.item_stop.hide()
         self.item_start.show()
 
-        gobject.source_remove(self.source_id)
+        self.event = None
+        self.reset_timer()
+        try:
+            gobject.source_remove(self.source_id)
+        except:
+            pass
+        self.indicator.set_label('00:00', 'pomodoro')
+        self.indicator.set_icon(self.get_icon(iconName='break-000.svg'))
 
     def resume(self, source):
         if self.event == self.PD:
@@ -208,30 +223,51 @@ class UbuntuIndicator(object):
             self.source_id = gobject.timeout_add(1000, self.start_break_timer, LONG_BREAK)
 
     def reset(self, source):
-        self.yesterday_streak = self.steak
+        self.reset_day()
+
+    def reset_day(self):
+        self.yesterday_streak = self.streak
         self.streak = 0
         self.item_yest_streak.set_label('Yesterday Streak: %s' % (self.yesterday_streak, ))
         self.item_streak.set_label('Day Streak: %s' % (self.streak, ))
-        self.startdate = datetime.now().day
-        self.reset_timer()
-        self.indicator.set_icon(self.get_icon(iconName='break-000.svg'))
-        try:
-            gobject.source_remove(self.source_id)
-        except:
-            pass
+        self.cur.execute("UPDATE userdata SET streak=?, yesterday_streak=? WHERE streak=?", (self.streak, self.yesterday_streak, self.yesterday_streak))
+        self.conn.commit()
+        self.reset_time = datetime.now().strftime('%Y-%m-%dT%H:%M')
+        self.cur.execute("UPDATE userdata SET reset_time=? WHERE streak=?", (self.reset_time, self.streak))
+        self.conn.commit()
+        self.stop_pomodoro()
 
     def run(self):
+        self.cur.execute("SELECT * FROM userdata")
+        dbdata = self.cur.fetchone()
+        self.yesterday_streak = dbdata[0]
+        self.streak = dbdata[1]
+        self.reset_time = datetime.strptime(dbdata[2], '%Y-%m-%dT%H:%M')
+        self.timer = 0
+
         self.indicator = appindicator.Indicator.new(APPINDICATOR_ID, self.get_icon(iconName='break-000.svg'), appindicator.IndicatorCategory.SYSTEM_SERVICES)
         self.indicator.set_status(appindicator.IndicatorStatus.ACTIVE)
         self.indicator.set_menu(self.build_menu())
-        gobject.timeout_add(1000, self.update_label)
+        self.event = None
+        gobject.timeout_add(500, self.update_label)
         gtk.main()
 
     def update_label(self):
-        minute = str(WORK_TIME - int(self.timer // 60))
+        if self.event == None:
+            self.indicator.set_label('00:00', 'pomodoro')
+            return True
+
+        if self.event == self.PD:
+            rmnTime = WORK_TIME*60 - self.timer
+        elif self.event == self.SB:
+            rmnTime = SHORT_BREAK*60 - self.timer
+        else:
+            rmnTime = LONG_BREAK*60 - self.timer
+
+        minute = str(int(rmnTime // 60))
         if len(minute) == 1:
             minute = '0'+minute
-        second = str(60 - int(self.timer % 60))
+        second = str(int(rmnTime % 60))
         if len(second) == 1:
             second = '0'+second
         self.indicator.set_label(minute+':'+second, 'pomodoro')
