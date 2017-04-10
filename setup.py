@@ -3,6 +3,7 @@
 import os
 import sqlite3
 from datetime import datetime
+import time
 
 PATH = os.getcwd()
 datadir = os.getcwd() + os.sep + 'data' + os.sep
@@ -15,10 +16,11 @@ if not os.path.exists(datadir + 'pomodoro.db'):
 
     # create table userdata
     cur.execute('''
-        CREATE TABLE userdata (yesterday_streak int, streak int, reset_time text)
+        CREATE TABLE userdata (datestamp text, streak int)
     ''')
 
-    cur.execute("INSERT INTO userdata VALUES (?, ?, ?)", (0, 0, datetime.now().strftime("%Y-%m-%dT%H:%M")))
+    cur.execute("INSERT INTO userdata VALUES (?, ?)", (datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), 0,))
+    cur.execute("INSERT INTO userdata VALUES (?, ?)", ('current', 0,))
 
     conn.commit()
     conn.close()

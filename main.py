@@ -53,10 +53,10 @@ class UbuntuIndicator(object):
         item_long_break.connect('activate', self.long_break)
         self.menu.append(item_long_break)
         self.menu.append(gtk.SeparatorMenuItem())
-        self.item_streak = gtk.MenuItem('Day Streak: %s' % (self.streak, ))
+        self.item_streak = gtk.MenuItem('Current Streak: %s' % (self.streak, ))
         self.menu.append(self.item_streak)
-        self.item_yest_streak = gtk.MenuItem('Yesterday Streak: %s' % (self.yesterday_streak, ))
-        self.menu.append(self.item_yest_streak)
+        self.item_last_streak = gtk.MenuItem('Last Streak: %s' % (self.last_streak, ))
+        self.menu.append(self.item_last_streak)
         self.menu.append(gtk.SeparatorMenuItem())
         item_reset = gtk.MenuItem('Reset')
         item_reset.connect('activate', self.reset)
@@ -129,9 +129,9 @@ class UbuntuIndicator(object):
 
         if self.timer == WORK_TIME*60:
             self.streak += 1
-            self.cur.execute("UPDATE userdata SET streak=? WHERE streak=?", (self.streak, self.streak - 1))
+            self.cur.execute("UPDATE userdata SET streak=? WHERE datestamp=?", (self.streak, 'current'))
             self.conn.commit()
-            self.item_streak.set_label('Day Streak: %s' % (self.streak, ))
+            self.item_streak.set_label('Current Streak: %s' % (self.streak, ))
             if self.streak % STREAK_LENGTH == 0:
                 self.break_time(LONG_BREAK)
             else:
@@ -230,23 +230,25 @@ class UbuntuIndicator(object):
         self.reset_day()
 
     def reset_day(self):
-        self.yesterday_streak = self.streak
+        self.last_streak = self.streak
         self.streak = 0
-        self.item_yest_streak.set_label('Yesterday Streak: %s' % (self.yesterday_streak, ))
-        self.item_streak.set_label('Day Streak: %s' % (self.streak, ))
-        self.cur.execute("UPDATE userdata SET streak=?, yesterday_streak=? WHERE streak=?", (self.streak, self.yesterday_streak, self.yesterday_streak))
-        self.conn.commit()
         self.reset_time = datetime.now()
-        self.cur.execute("UPDATE userdata SET reset_time=? WHERE streak=?", (self.reset_time.strftime('%Y-%m-%dT%H:%M'), self.streak))
+
+        self.item_last_streak.set_label('Last Streak: %s' % (self.last_streak, ))
+        self.item_streak.set_label('Current Streak: %s' % (self.streak, ))
+
+        self.cur.execute("UPDATE userdata SET streak=?, datestamp=? WHERE datestamp=?", (self.last_streak, self.reset_time.strftime('%Y-%m-%dT%H:%M:%S'), 'current'))
+        self.cur.execute("INSERT INTO userdata VALUES (?, ?)", ('current', self.streak,))
         self.conn.commit()
+
         self.stop_pomodoro()
 
     def run(self):
-        self.cur.execute("SELECT * FROM userdata")
-        dbdata = self.cur.fetchone()
-        self.yesterday_streak = dbdata[0]
-        self.streak = dbdata[1]
-        self.reset_time = datetime.strptime(dbdata[2], '%Y-%m-%dT%H:%M')
+        self.cur.execute("SELECT * FROM userdata ORDER BY datestamp DESC LIMIT 2")
+        dbdata = self.cur.fetchall()
+        self.last_streak = dbdata[1][1]
+        self.streak = dbdata[0][1]
+        self.reset_time = datetime.strptime(dbdata[1][0], '%Y-%m-%dT%H:%M:%S')
         self.timer = 0
 
         self.indicator = appindicator.Indicator.new(APPINDICATOR_ID, self.get_icon(iconName='break-000.svg'), appindicator.IndicatorCategory.SYSTEM_SERVICES)
