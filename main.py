@@ -143,8 +143,10 @@ class UbuntuIndicator(object):
         self.indicator.set_icon(self.get_icon())
         cur_pos = gdk.get_default_root_window().get_pointer()
         if self.timer == breakTime*60:
+            self.indicator.set_icon(self.get_icon(iconName='pomodoro-paused-000.svg'))
+            self.indicator.set_label('%s:00' % (WORK_TIME, ), 'pomodoro')
+        elif self.timer > breakTime*60:
             while cur_pos == gdk.get_default_root_window().get_pointer():
-                self.indicator.set_icon(self.get_icon(iconName='pomodoro-paused-000.svg'))
                 time.sleep(0.5)
             self.work_time()
         return True
