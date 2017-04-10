@@ -236,8 +236,8 @@ class UbuntuIndicator(object):
         self.item_streak.set_label('Day Streak: %s' % (self.streak, ))
         self.cur.execute("UPDATE userdata SET streak=?, yesterday_streak=? WHERE streak=?", (self.streak, self.yesterday_streak, self.yesterday_streak))
         self.conn.commit()
-        self.reset_time = datetime.now().strftime('%Y-%m-%dT%H:%M')
-        self.cur.execute("UPDATE userdata SET reset_time=? WHERE streak=?", (self.reset_time, self.streak))
+        self.reset_time = datetime.now()
+        self.cur.execute("UPDATE userdata SET reset_time=? WHERE streak=?", (self.reset_time.strftime('%Y-%m-%dT%H:%M'), self.streak))
         self.conn.commit()
         self.stop_pomodoro()
 
