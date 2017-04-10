@@ -2,13 +2,11 @@ Source: ubuntu-pomodoro
 Section: python
 Priority: optional
 Maintainer: Shubham Yadav, <shubhamy2015@gmail.com>
-Build-Depends: debhelper (>= 7),
-               python (>= 2.6.6-3~)
+Build-Depends: python-gi
 Standards-Version: 3.9.2
-X-Python-Version: >= 2.6
-
+X-Python-Version: >= 2.7.12
 
 Package: ubuntu-pomodoro
 Architecture: all
-Section: python
-Depends: python-appindicator, ${misc:Depends}, ${python:Depends}
+Depends: ubuntu-pomodoro, ${python-gi:Depends}, ${python:Depends}
+Description: A pomodoro based ubuntu app
