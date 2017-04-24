@@ -79,7 +79,7 @@ class UbuntuIndicator(object):
         self.item_start.hide()
         self.item_pause.show()
         self.item_stop.show()
-        if (datetime.now() - self.reset_time).seconds >= 24*3600:
+        if (datetime.now() - self.reset_time).total_seconds() >= 24*3600:
             self.reset_day()
         self.work_time()
 
